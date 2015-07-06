@@ -44,6 +44,10 @@ public abstract class AbstractBlobstoreTest {
 
   protected abstract Blobstore getBlobStore();
 
+  private Java8Blobstore getJava8BlobStore() {
+    return new Java8Blobstore(getBlobStore(), getTransactionHelper());
+  }
+
   protected abstract TransactionHelper getTransactionHelper();
 
   private void notifyWaiter(final BooleanHolder shouldWait) {
@@ -55,7 +59,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test01ZeroLengthBlob() {
-    Blobstore blobStore = getBlobStore();
+    Java8Blobstore blobStore = getJava8BlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
     });
 
@@ -66,7 +70,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test02BlobCreationWithContent() {
-    Blobstore blobStore = getBlobStore();
+    Java8Blobstore blobStore = getJava8BlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 2, 1, 2, 1 }, 1, 2);
     });
@@ -84,7 +88,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test03UpdateParallelBlobManipulationWithoutTransaction() {
-    Blobstore blobStore = getBlobStore();
+    Java8Blobstore blobStore = getJava8BlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 0 }, 0, 1);
     });
@@ -123,7 +127,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test04UpdateParallelBlobManipulationWithTransaction() {
-    Blobstore blobStore = getBlobStore();
+    Java8Blobstore blobStore = getJava8BlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 0 }, 0, 1);
     });
@@ -175,7 +179,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test05Seek() {
-    Blobstore blobStore = getBlobStore();
+    Java8Blobstore blobStore = getJava8BlobStore();
     final int sampleContentSize = 1024 * 1024;
     long blobId = blobStore.createBlob((blobAccessor) -> {
 
