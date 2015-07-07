@@ -7,6 +7,9 @@ import org.everit.blobstore.api.BlobReader;
 import org.everit.blobstore.api.Blobstore;
 import org.everit.osgi.transaction.helper.api.TransactionHelper;
 
+/**
+ * Helper class to be able to use blobstore via Java 8 lambda expressions.
+ */
 public class Java8Blobstore {
 
   private final TransactionHelper transactionHelper;
@@ -18,6 +21,9 @@ public class Java8Blobstore {
     this.transactionHelper = transactionHelper;
   }
 
+  /**
+   * See {@link Blobstore#createBlob()}.
+   */
   public long createBlob(final Consumer<BlobAccessor> action) {
     return transactionHelper.required(() -> {
       try (BlobAccessor blobAccessor = wrapped.createBlob()) {
@@ -29,6 +35,9 @@ public class Java8Blobstore {
     });
   }
 
+  /**
+   * See {@link Blobstore#deleteBlob(long)}.
+   */
   public void deleteBlob(final long blobId) {
     transactionHelper.required(() -> {
       wrapped.deleteBlob(blobId);
@@ -36,6 +45,9 @@ public class Java8Blobstore {
     });
   }
 
+  /**
+   * See {@link Blobstore#readBlob(long)}.
+   */
   public void readBlob(final long blobId, final Consumer<BlobReader> action) {
     transactionHelper.required(() -> {
       try (BlobReader blobReader = wrapped.readBlob(blobId)) {
@@ -47,6 +59,9 @@ public class Java8Blobstore {
     });
   }
 
+  /**
+   * See {@link Blobstore#updateBlob(long)}.
+   */
   public void updateBlob(final long blobId, final Consumer<BlobAccessor> action) {
     transactionHelper.required(() -> {
       try (BlobAccessor blobAccessor = wrapped.updateBlob(blobId)) {
