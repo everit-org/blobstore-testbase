@@ -49,11 +49,11 @@ public class BlobstoreStressAndConsistencyTester {
 
     public static final int DEFAULT_INITIAL_BLOB_NUM = 1000;
 
-    public static final int DEFAULT_ITERTAION_NUM_PER_THREAD = 10000;
+    public static final int DEFAULT_ITERTAION_NUM_PER_THREAD = 5000;
 
     public static final int DEFAULT_READ_ACTION_CHANCE_PART = 80;
 
-    public static final int DEFAULT_THREAD_NUM = 6;
+    public static final int DEFAULT_THREAD_NUM = 4;
 
     public static final int DEFAULT_UPDATE_ACTION_CHANCE_PART = 10;
 
