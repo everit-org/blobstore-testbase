@@ -7,7 +7,6 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Random;
 import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.concurrent.locks.Lock;
 import java.util.concurrent.locks.ReadWriteLock;
@@ -50,11 +49,11 @@ public class BlobstoreStressAndConsistencyTester {
 
     public static final int DEFAULT_INITIAL_BLOB_NUM = 1000;
 
-    public static final int DEFAULT_ITERTAION_NUM_PER_THREAD = 1000;
+    public static final int DEFAULT_ITERTAION_NUM_PER_THREAD = 10000;
 
     public static final int DEFAULT_READ_ACTION_CHANCE_PART = 80;
 
-    public static final int DEFAULT_THREAD_NUM = 4;
+    public static final int DEFAULT_THREAD_NUM = 6;
 
     public static final int DEFAULT_UPDATE_ACTION_CHANCE_PART = 10;
 
@@ -125,6 +124,13 @@ public class BlobstoreStressAndConsistencyTester {
   }
 
   /**
+   * Simple holder class to pass integer values back from Lambda expressions.
+   */
+  protected static class IntegerHolder {
+    public int value = 0;
+  }
+
+  /**
    * Internal exception class to communicate that an exception occured that can come from concurrent
    * read and write accesses of the same blob.
    *
@@ -137,6 +143,16 @@ public class BlobstoreStressAndConsistencyTester {
       super(message, cause);
     }
 
+  }
+
+  /**
+   * Simple holder class for references.
+   *
+   * @param <R>
+   *          Type of the reference.
+   */
+  protected static class ReferenceHolder<R> {
+    public R value = null;
   }
 
   private static final Logger LOGGER =
@@ -400,19 +416,19 @@ public class BlobstoreStressAndConsistencyTester {
    */
   protected void readBlobContent() {
     Random random = new Random();
-    AtomicReference<byte[]> sampleContent = new AtomicReference<byte[]>(null);
-    AtomicInteger sampleStart = new AtomicInteger();
-    AtomicInteger sampleSize = new AtomicInteger();
-    AtomicReference<Long> version = new AtomicReference<Long>(null);
+    ReferenceHolder<byte[]> sampleContent = new ReferenceHolder<byte[]>();
+    IntegerHolder startPositionHolder = new IntegerHolder();
+    IntegerHolder readAmountHolder = new IntegerHolder();
+    ReferenceHolder<Long> version = new ReferenceHolder<Long>();
     int bufferSize = random.nextInt(averageReadBufferSize * 2) + 1;
     runTestActionWithRandomBlob(
         (blobstore, blobId) -> {
           try {
             BlobReader blobReader = blobstore.readBlob(blobId);
 
-            if (version.get() == null) {
-              version.set(blobReader.version());
-            } else if (!version.get().equals(blobReader.version())) {
+            if (version.value == null) {
+              version.value = blobReader.version();
+            } else if (!version.value.equals(blobReader.version())) {
               throw new PossibleConcurrentException("Blob version conflict", null);
             }
 
@@ -423,17 +439,21 @@ public class BlobstoreStressAndConsistencyTester {
         } ,
         (blobstore, blobReader) -> {
           try {
-            if (sampleContent.get() == null) {
-              sampleStart.set(random.nextInt((int) blobReader.size()));
-              sampleSize.set(random.nextInt(averageReadAmount));
+            if (sampleContent.value == null) {
+              int blobSize = (int) blobReader.size();
+              if (blobSize > 0) {
+                startPositionHolder.value = random.nextInt(blobSize);
+              }
+              readAmountHolder.value = random.nextInt(averageReadAmount * 2);
             }
             byte[] content =
-                readBlobContent(blobReader, sampleStart.get(), sampleSize.get(), bufferSize);
-            if (sampleContent.get() == null) {
-              sampleContent.set(content);
+                readBlobContent(blobReader, startPositionHolder.value, readAmountHolder.value,
+                    bufferSize);
+            if (sampleContent.value == null) {
+              sampleContent.value = content;
             } else {
               try {
-                Assert.assertArrayEquals(sampleContent.get(), content);
+                Assert.assertArrayEquals(sampleContent.value, content);
               } catch (AssertionError e) {
                 LOGGER.log(Level.INFO, "Conflict in Blob: " + blobReader.getBlobId());
                 throw e;
@@ -594,7 +614,7 @@ public class BlobstoreStressAndConsistencyTester {
   protected void updateBlob() {
     Random random = new Random();
     AtomicReference<byte[]> randomContentHolder = new AtomicReference<byte[]>(null);
-    AtomicInteger startPositionHolder = new AtomicInteger();
+    IntegerHolder startPositionHolder = new IntegerHolder();
     runTestActionWithRandomBlob(
         (blobstore, blobId) -> {
           try {
@@ -609,10 +629,13 @@ public class BlobstoreStressAndConsistencyTester {
             if (randomContent == null) {
               randomContent = createRandomContent(random.nextInt(averageUpdateAmount));
               randomContentHolder.set(randomContent);
-              startPositionHolder.set(random.nextInt((int) blobAccessor.size()));
+              int blobSize = (int) blobAccessor.size();
+              if (blobSize > 0) {
+                startPositionHolder.value = random.nextInt(blobSize);
+              }
             }
 
-            updateBlobWithContent(blobAccessor, startPositionHolder.get(), randomContent, random);
+            updateBlobWithContent(blobAccessor, startPositionHolder.value, randomContent, random);
           } finally {
             blobAccessor.close();
           }
