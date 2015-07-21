@@ -1,5 +1,7 @@
 package org.everit.blobstore.testbase;
 
+import java.util.Set;
+import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Consumer;
 
 import org.everit.blobstore.api.BlobAccessor;
@@ -10,13 +12,15 @@ import org.everit.osgi.transaction.helper.api.TransactionHelper;
 /**
  * Helper class to be able to use blobstore via Java 8 lambda expressions.
  */
-public class Java8Blobstore {
+public class LambdaBlobstore {
+
+  private final Set<Long> blobIdsToDelete = new ConcurrentSkipListSet<>();
 
   private final TransactionHelper transactionHelper;
 
   private final Blobstore wrapped;
 
-  public Java8Blobstore(final Blobstore wrapped, final TransactionHelper transactionHelper) {
+  public LambdaBlobstore(final Blobstore wrapped, final TransactionHelper transactionHelper) {
     this.wrapped = wrapped;
     this.transactionHelper = transactionHelper;
   }
@@ -25,7 +29,7 @@ public class Java8Blobstore {
    * See {@link Blobstore#createBlob()}.
    */
   public long createBlob(final Consumer<BlobAccessor> action) {
-    return transactionHelper.required(() -> {
+    long blobId = transactionHelper.required(() -> {
       try (BlobAccessor blobAccessor = wrapped.createBlob()) {
         if (action != null) {
           action.accept(blobAccessor);
@@ -33,6 +37,20 @@ public class Java8Blobstore {
         return blobAccessor.getBlobId();
       }
     });
+    blobIdsToDelete.add(blobId);
+    return blobId;
+  }
+
+  /**
+   * Deletes all blobs that were created by this blobstore wrapper.
+   */
+  public void deleteAllCreatedBlobs() {
+    Long[] blobIdArray = new Long[blobIdsToDelete.size()];
+    blobIdsToDelete.toArray(blobIdArray);
+    for (Long blobId : blobIdArray) {
+      deleteBlob(blobId);
+    }
+
   }
 
   /**
@@ -43,6 +61,7 @@ public class Java8Blobstore {
       wrapped.deleteBlob(blobId);
       return null;
     });
+    blobIdsToDelete.remove(blobId);
   }
 
   /**

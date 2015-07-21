@@ -20,13 +20,16 @@ import java.lang.Thread.State;
 import org.everit.blobstore.api.BlobReader;
 import org.everit.blobstore.api.Blobstore;
 import org.everit.osgi.transaction.helper.api.TransactionHelper;
+import org.junit.After;
 import org.junit.Assert;
+import org.junit.Assume;
 import org.junit.FixMethodOrder;
 import org.junit.Test;
 import org.junit.runners.MethodSorters;
 
 /**
- * Abstract class to test blobstore use-cases.
+ * Abstract class to test blobstore use-cases. Tests can be skipped if {@link #getBlobStore()}
+ * returns <code>null</code>.
  */
 @FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public abstract class AbstractBlobstoreTest {
@@ -42,10 +45,37 @@ public abstract class AbstractBlobstoreTest {
     }
   }
 
+  private static final int DEFAULT_TIMEOUT = 5000;
+
+  private LambdaBlobstore lambdaBlobstore;
+
+  @After
+  public void after() {
+    getLambdaBlobStore().deleteAllCreatedBlobs();
+    lambdaBlobstore = null;
+  }
+
+  /**
+   * Returns the {@link Blobstore} to test with. If the method returns <code>null</code>, all tests
+   * will be skipped.
+   *
+   * @return The {@link Blobstore} to test with or <code>null</code> if the tests should be skipped.
+   */
   protected abstract Blobstore getBlobStore();
 
-  private Java8Blobstore getJava8BlobStore() {
-    return new Java8Blobstore(getBlobStore(), getTransactionHelper());
+  /**
+   * Gets a Java 8 Blobstore that will delete all blobs created by the tests in the end.
+   *
+   * @return The lambda based blobstore.
+   */
+  protected LambdaBlobstore getLambdaBlobStore() {
+    if (lambdaBlobstore != null) {
+      return lambdaBlobstore;
+    }
+    Blobstore blobStore = getBlobStore();
+    Assume.assumeNotNull(blobStore);
+    lambdaBlobstore = new LambdaBlobstore(blobStore, getTransactionHelper());
+    return lambdaBlobstore;
   }
 
   protected abstract TransactionHelper getTransactionHelper();
@@ -59,7 +89,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test01ZeroLengthBlob() {
-    Java8Blobstore blobStore = getJava8BlobStore();
+    LambdaBlobstore blobStore = getLambdaBlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
     });
 
@@ -70,7 +100,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test02BlobCreationWithContent() {
-    Java8Blobstore blobStore = getJava8BlobStore();
+    LambdaBlobstore blobStore = getLambdaBlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 2, 1, 2, 1 }, 1, 2);
     });
@@ -87,38 +117,47 @@ public abstract class AbstractBlobstoreTest {
   }
 
   @Test
-  public void test03UpdateParallelBlobManipulationWithoutTransaction() {
-    Java8Blobstore blobStore = getJava8BlobStore();
+  public void test03ParallelBlobUpdateAndRead() {
+    LambdaBlobstore blobStore = getLambdaBlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
-      blobAccessor.write(new byte[] { 0 }, 0, 1);
+      blobAccessor.write(new byte[] { 2 }, 0, 1);
     });
 
     BooleanHolder waitForReadCheck = new BooleanHolder(true);
     BooleanHolder waitForUpdate = new BooleanHolder(true);
 
     new Thread(() -> {
-      blobStore.updateBlob(blobId, (blobAccessor) -> {
-        blobAccessor.seek(blobAccessor.size());
-        blobAccessor.write(new byte[] { 1 }, 0, 1);
-        waitIfTrue(waitForReadCheck);
-      });
-      notifyWaiter(waitForUpdate);
+      try {
+        blobStore.updateBlob(blobId, (blobAccessor) -> {
+          blobAccessor.seek(blobAccessor.size());
+          blobAccessor.write(new byte[] { 1 }, 0, 1);
+          waitIfTrue(waitForReadCheck, DEFAULT_TIMEOUT);
+        });
+      } finally {
+        notifyWaiter(waitForUpdate);
+      }
     }).start();
 
-    // Do some test read before update finishes
-    blobStore.readBlob(blobId, (blobReader) -> {
-      Assert.assertEquals(1, blobReader.size());
-    });
+    try {
+      // Do some test read before update finishes
+      blobStore.readBlob(blobId, (blobReader) -> {
+        byte[] buffer = new byte[2];
+        int read = blobReader.read(buffer, 0, 2);
+        Assert.assertEquals(1, read);
+        Assert.assertEquals(2, buffer[0]);
+      });
 
-    // Create another blob until lock of first blob holds
-    long blobIdOfSecondBlob = blobStore.createBlob(null);
-    blobStore.readBlob(blobIdOfSecondBlob, (blobReader) -> {
-      Assert.assertEquals(0, blobReader.size());
-    });
-    blobStore.deleteBlob(blobIdOfSecondBlob);
+      // Create another blob until lock of first blob holds
+      long blobIdOfSecondBlob = blobStore.createBlob(null);
+      blobStore.readBlob(blobIdOfSecondBlob, (blobReader) -> {
+        Assert.assertEquals(0, blobReader.size());
+      });
+      blobStore.deleteBlob(blobIdOfSecondBlob);
 
-    notifyWaiter(waitForReadCheck);
-    waitIfTrue(waitForUpdate);
+    } finally {
+      notifyWaiter(waitForReadCheck);
+      waitIfTrue(waitForUpdate, DEFAULT_TIMEOUT);
+    }
 
     blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.size()));
 
@@ -127,7 +166,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test04UpdateParallelBlobManipulationWithTransaction() {
-    Java8Blobstore blobStore = getJava8BlobStore();
+    LambdaBlobstore blobStore = getLambdaBlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 0 }, 0, 1);
     });
@@ -153,22 +192,25 @@ public abstract class AbstractBlobstoreTest {
       blobStore.deleteBlob(blobId2);
 
       Thread otherUpdatingThread = new Thread(() -> {
-        blobStore.updateBlob(blobId, (blobAccessor) -> {
-          blobAccessor.seek(blobAccessor.size());
-          blobAccessor.write(new byte[] { 2 }, 0, 1);
+        try {
+          blobStore.updateBlob(blobId, (blobAccessor) -> {
+            blobAccessor.seek(blobAccessor.size());
+            blobAccessor.write(new byte[] { 2 }, 0, 1);
 
-        });
-        notifyWaiter(waitForAppendByBlockedThread);
+          });
+        } finally {
+          notifyWaiter(waitForAppendByBlockedThread);
+        }
       });
       otherUpdatingThread.start();
       final int maxWaitTime = 1000;
-      waitForThreadState(otherUpdatingThread, State.WAITING, maxWaitTime);
+      waitForThreadStateOrSocketRead(otherUpdatingThread, State.WAITING, maxWaitTime);
       blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.size()));
 
       return null;
     });
 
-    waitIfTrue(waitForAppendByBlockedThread);
+    waitIfTrue(waitForAppendByBlockedThread, DEFAULT_TIMEOUT);
     final int expectedBlobSize = 3;
 
     blobStore.readBlob(blobId,
@@ -179,7 +221,7 @@ public abstract class AbstractBlobstoreTest {
 
   @Test
   public void test05Seek() {
-    Java8Blobstore blobStore = getJava8BlobStore();
+    LambdaBlobstore blobStore = getLambdaBlobStore();
     final int sampleContentSize = 1024 * 1024;
     long blobId = blobStore.createBlob((blobAccessor) -> {
 
@@ -226,36 +268,58 @@ public abstract class AbstractBlobstoreTest {
     Assert.assertArrayEquals(new byte[] { 1, 2 }, buffer);
   }
 
-  private void waitForThreadState(final Thread otherUpdatingThread, final State state,
+  private boolean threadWaitingOnStreamRead(final Thread thread) {
+    StackTraceElement[] stackTrace = thread.getStackTrace();
+    if (stackTrace.length == 0) {
+      return false;
+    }
+    StackTraceElement stackTraceElement = stackTrace[0];
+    return stackTraceElement.isNativeMethod()
+        && stackTraceElement.getClassName().contains("InputStream");
+  }
+
+  private void waitForThreadStateOrSocketRead(final Thread thread, final State state,
       final int maxWaitTime) {
 
-    int i = 0;
-    while (i < maxWaitTime && otherUpdatingThread.getState() != state) {
+    long startTime = System.currentTimeMillis();
+    while (thread.getState() != state && !threadWaitingOnStreamRead(thread)) {
+      long currentTime = System.currentTimeMillis();
+      if (currentTime - startTime > maxWaitTime) {
+        StackTraceElement[] stackTrace = thread.getStackTrace();
+        StringBuilder sb = new StringBuilder();
+        for (StackTraceElement stackTraceElement : stackTrace) {
+          sb.append("\n").append(stackTraceElement.toString());
+        }
+
+        throw new IllegalStateException("Expected thread state is " + state
+            + "; current thread state: " + thread.getState()
+            + ", and thread is also not waiting on socket read:" + sb.toString());
+      }
       try {
         Thread.sleep(1);
       } catch (InterruptedException e) {
         throw new RuntimeException(e);
       }
-      i++;
-    }
-
-    if (otherUpdatingThread.getState() != state) {
-      throw new IllegalStateException("Expected thread state is " + state
-          + "; current thread state: " + otherUpdatingThread.getState());
     }
   }
 
-  private void waitIfTrue(final BooleanHolder shouldWait) {
-    while (shouldWait.value) {
+  private void waitIfTrue(final BooleanHolder shouldWait, final long timeout) {
+    long startTime = System.currentTimeMillis();
+    long timeElapsed = 0;
+    while (shouldWait.value && timeElapsed < timeout) {
       synchronized (shouldWait) {
-        if (shouldWait.value) {
+        timeElapsed = System.currentTimeMillis() - startTime;
+        if (shouldWait.value && timeElapsed < timeout) {
           try {
-            shouldWait.wait();
+            shouldWait.wait(timeout - timeElapsed);
           } catch (InterruptedException e) {
             throw new RuntimeException(e);
           }
         }
       }
+    }
+    if (shouldWait.value) {
+      Assert.fail("Expected operation has not been run until timeout");
     }
   }
 }
