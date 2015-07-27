@@ -16,6 +16,11 @@
 package org.everit.blobstore.testbase;
 
 import java.lang.Thread.State;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.everit.blobstore.api.BlobReader;
 import org.everit.blobstore.api.Blobstore;
@@ -165,7 +170,7 @@ public abstract class AbstractBlobstoreTest {
   }
 
   @Test
-  public void test04UpdateParallelBlobManipulationWithTransaction() {
+  public void test04ParallelBlobManipulationWithTwoTransactions() {
     LambdaBlobstore blobStore = getLambdaBlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 0 }, 0, 1);
@@ -255,6 +260,42 @@ public abstract class AbstractBlobstoreTest {
       Assert.assertArrayEquals(dataOnMiddle, result);
     });
     blobStore.deleteBlob(blobId);
+  }
+
+  @Test
+  public void test06VersionIsUpgradedDuringUpdate() {
+    LambdaBlobstore blobstore = getLambdaBlobStore();
+    Set<Long> usedVersions = Collections.synchronizedSet(new HashSet<>());
+    final long blobId = blobstore.createBlob((blobAccessor) -> {
+    });
+    final int threadNum = 4;
+    final int iterationNum = 50;
+
+    AtomicBoolean sameVersionWasUsedTwice = new AtomicBoolean(false);
+
+    CountDownLatch countDownLatch = new CountDownLatch(threadNum);
+    for (int i = 0; i < threadNum; i++) {
+      new Thread(() -> {
+        try {
+          for (int j = 0; j < iterationNum; j++) {
+            blobstore.updateBlob(blobId, (blobAccessor) -> {
+              boolean added = usedVersions.add(blobAccessor.version());
+              if (!added) {
+                sameVersionWasUsedTwice.set(true);
+              }
+            });
+          }
+        } finally {
+          countDownLatch.countDown();
+        }
+      }).start();
+    }
+    try {
+      countDownLatch.await();
+    } catch (InterruptedException e) {
+      throw new RuntimeException(e);
+    }
+    Assert.assertFalse(sameVersionWasUsedTwice.get());
   }
 
   private void testSeekAndRead(final BlobReader blobAccessor, final int sampleContentSize) {

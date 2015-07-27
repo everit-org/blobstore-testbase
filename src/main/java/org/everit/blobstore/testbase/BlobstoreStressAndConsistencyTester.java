@@ -49,7 +49,7 @@ public class BlobstoreStressAndConsistencyTester {
 
     public static final int DEFAULT_INITIAL_BLOB_NUM = 1000;
 
-    public static final int DEFAULT_ITERTAION_NUM_PER_THREAD = 5000;
+    public static final int DEFAULT_ITERTAION_NUM_PER_THREAD = 500;
 
     public static final int DEFAULT_READ_ACTION_CHANCE_PART = 80;
 
@@ -155,8 +155,8 @@ public class BlobstoreStressAndConsistencyTester {
     public R value = null;
   }
 
-  private static final Logger LOGGER =
-      Logger.getLogger(BlobstoreStressAndConsistencyTester.class.getName());
+  private static final Logger LOGGER = Logger
+      .getLogger(BlobstoreStressAndConsistencyTester.class.getName());
 
   /**
    * Runs a stress and optionally a consistency test.
@@ -180,8 +180,8 @@ public class BlobstoreStressAndConsistencyTester {
       return;
     }
 
-    BlobstoreStressAndConsistencyTester tester =
-        new BlobstoreStressAndConsistencyTester(config, transactionHelper, blobstores);
+    BlobstoreStressAndConsistencyTester tester = new BlobstoreStressAndConsistencyTester(config,
+        transactionHelper, blobstores);
     tester.runTest();
   }
 
@@ -446,9 +446,9 @@ public class BlobstoreStressAndConsistencyTester {
               }
               readAmountHolder.value = random.nextInt(averageReadAmount * 2);
             }
-            byte[] content =
-                readBlobContent(blobReader, startPositionHolder.value, readAmountHolder.value,
-                    bufferSize);
+            byte[] content = readBlobContent(blobReader, startPositionHolder.value,
+                readAmountHolder.value,
+                bufferSize);
             if (sampleContent.value == null) {
               sampleContent.value = content;
             } else {
