@@ -427,8 +427,8 @@ public class BlobstoreStressAndConsistencyTester {
             BlobReader blobReader = blobstore.readBlob(blobId);
 
             if (version.value == null) {
-              version.value = blobReader.version();
-            } else if (!version.value.equals(blobReader.version())) {
+              version.value = blobReader.getVersion();
+            } else if (!version.value.equals(blobReader.getVersion())) {
               throw new PossibleConcurrentException("Blob version conflict", null);
             }
 
@@ -440,7 +440,7 @@ public class BlobstoreStressAndConsistencyTester {
         (blobstore, blobReader) -> {
           try {
             if (sampleContent.value == null) {
-              int blobSize = (int) blobReader.size();
+              int blobSize = (int) blobReader.getSize();
               if (blobSize > 0) {
                 startPositionHolder.value = random.nextInt(blobSize);
               }
@@ -629,7 +629,7 @@ public class BlobstoreStressAndConsistencyTester {
             if (randomContent == null) {
               randomContent = createRandomContent(random.nextInt(averageUpdateAmount));
               randomContentHolder.set(randomContent);
-              int blobSize = (int) blobAccessor.size();
+              int blobSize = (int) blobAccessor.getSize();
               if (blobSize > 0) {
                 startPositionHolder.value = random.nextInt(blobSize);
               }

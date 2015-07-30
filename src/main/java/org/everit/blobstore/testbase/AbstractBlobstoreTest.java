@@ -99,7 +99,7 @@ public abstract class AbstractBlobstoreTest {
     });
 
     blobStore.readBlob(blobId, (blobReader) -> {
-      Assert.assertEquals(0, blobReader.size());
+      Assert.assertEquals(0, blobReader.getSize());
     });
   }
 
@@ -111,7 +111,7 @@ public abstract class AbstractBlobstoreTest {
     });
 
     blobStore.readBlob(blobId, (blobReader) -> {
-      Assert.assertEquals(2, blobReader.size());
+      Assert.assertEquals(2, blobReader.getSize());
       final int bufferSize = 5;
       byte[] buffer = new byte[bufferSize];
       final int readLength = 3;
@@ -134,7 +134,7 @@ public abstract class AbstractBlobstoreTest {
     new Thread(() -> {
       try {
         blobStore.updateBlob(blobId, (blobAccessor) -> {
-          blobAccessor.seek(blobAccessor.size());
+          blobAccessor.seek(blobAccessor.getSize());
           blobAccessor.write(new byte[] { 1 }, 0, 1);
           waitIfTrue(waitForReadCheck, DEFAULT_TIMEOUT);
         });
@@ -155,7 +155,7 @@ public abstract class AbstractBlobstoreTest {
       // Create another blob until lock of first blob holds
       long blobIdOfSecondBlob = blobStore.createBlob(null);
       blobStore.readBlob(blobIdOfSecondBlob, (blobReader) -> {
-        Assert.assertEquals(0, blobReader.size());
+        Assert.assertEquals(0, blobReader.getSize());
       });
       blobStore.deleteBlob(blobIdOfSecondBlob);
 
@@ -164,7 +164,7 @@ public abstract class AbstractBlobstoreTest {
       waitIfTrue(waitForUpdate, DEFAULT_TIMEOUT);
     }
 
-    blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.size()));
+    blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
 
     blobStore.deleteBlob(blobId);
   }
@@ -180,13 +180,13 @@ public abstract class AbstractBlobstoreTest {
 
     getTransactionHelper().required(() -> {
       blobStore.updateBlob(blobId, (blobAccessor) -> {
-        blobAccessor.seek(blobAccessor.size());
+        blobAccessor.seek(blobAccessor.getSize());
         blobAccessor.write(new byte[] { 1 }, 0, 1);
       });
-      blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.size()));
+      blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
 
       getTransactionHelper().requiresNew(() -> {
-        blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(1, blobReader.size()));
+        blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(1, blobReader.getSize()));
         return null;
       });
 
@@ -199,7 +199,7 @@ public abstract class AbstractBlobstoreTest {
       Thread otherUpdatingThread = new Thread(() -> {
         try {
           blobStore.updateBlob(blobId, (blobAccessor) -> {
-            blobAccessor.seek(blobAccessor.size());
+            blobAccessor.seek(blobAccessor.getSize());
             blobAccessor.write(new byte[] { 2 }, 0, 1);
 
           });
@@ -210,7 +210,7 @@ public abstract class AbstractBlobstoreTest {
       otherUpdatingThread.start();
       final int maxWaitTime = 1000;
       waitForThreadStateOrSocketRead(otherUpdatingThread, State.WAITING, maxWaitTime);
-      blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.size()));
+      blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
 
       return null;
     });
@@ -219,7 +219,7 @@ public abstract class AbstractBlobstoreTest {
     final int expectedBlobSize = 3;
 
     blobStore.readBlob(blobId,
-        (blobReader) -> Assert.assertEquals(expectedBlobSize, blobReader.size()));
+        (blobReader) -> Assert.assertEquals(expectedBlobSize, blobReader.getSize()));
 
     blobStore.deleteBlob(blobId);
   }
@@ -279,7 +279,7 @@ public abstract class AbstractBlobstoreTest {
         try {
           for (int j = 0; j < iterationNum; j++) {
             blobstore.updateBlob(blobId, (blobAccessor) -> {
-              boolean added = usedVersions.add(blobAccessor.version());
+              boolean added = usedVersions.add(blobAccessor.getVersion());
               if (!added) {
                 sameVersionWasUsedTwice.set(true);
               }
