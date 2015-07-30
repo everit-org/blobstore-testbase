@@ -22,8 +22,8 @@ import java.util.Set;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-import org.everit.blobstore.api.BlobReader;
-import org.everit.blobstore.api.Blobstore;
+import org.everit.blobstore.BlobReader;
+import org.everit.blobstore.Blobstore;
 import org.everit.osgi.transaction.helper.api.TransactionHelper;
 import org.junit.After;
 import org.junit.Assert;

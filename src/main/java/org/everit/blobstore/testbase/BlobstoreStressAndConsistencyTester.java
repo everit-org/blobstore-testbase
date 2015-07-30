@@ -16,10 +16,10 @@ import java.util.function.BiFunction;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 
-import org.everit.blobstore.api.BlobAccessor;
-import org.everit.blobstore.api.BlobReader;
-import org.everit.blobstore.api.Blobstore;
-import org.everit.blobstore.api.NoSuchBlobException;
+import org.everit.blobstore.BlobAccessor;
+import org.everit.blobstore.BlobReader;
+import org.everit.blobstore.Blobstore;
+import org.everit.blobstore.NoSuchBlobException;
 import org.everit.osgi.transaction.helper.api.TransactionHelper;
 import org.junit.Assert;
 

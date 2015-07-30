@@ -4,9 +4,9 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentSkipListSet;
 import java.util.function.Consumer;
 
-import org.everit.blobstore.api.BlobAccessor;
-import org.everit.blobstore.api.BlobReader;
-import org.everit.blobstore.api.Blobstore;
+import org.everit.blobstore.BlobAccessor;
+import org.everit.blobstore.BlobReader;
+import org.everit.blobstore.Blobstore;
 import org.everit.osgi.transaction.helper.api.TransactionHelper;
 
 /**
