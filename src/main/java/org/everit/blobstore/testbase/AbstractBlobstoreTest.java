@@ -28,15 +28,12 @@ import org.everit.osgi.transaction.helper.api.TransactionHelper;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
-import org.junit.FixMethodOrder;
 import org.junit.Test;
-import org.junit.runners.MethodSorters;
 
 /**
  * Abstract class to test blobstore use-cases. Tests can be skipped if {@link #getBlobStore()}
  * returns <code>null</code>.
  */
-@FixMethodOrder(MethodSorters.NAME_ASCENDING)
 public abstract class AbstractBlobstoreTest {
 
   /**
