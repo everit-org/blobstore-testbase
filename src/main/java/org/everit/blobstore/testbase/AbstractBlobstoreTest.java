@@ -93,18 +93,7 @@ public abstract class AbstractBlobstoreTest {
   }
 
   @Test
-  public void test01ZeroLengthBlob() {
-    LambdaBlobstore blobStore = getLambdaBlobStore();
-    long blobId = blobStore.createBlob((blobAccessor) -> {
-    });
-
-    blobStore.readBlob(blobId, (blobReader) -> {
-      Assert.assertEquals(0, blobReader.getSize());
-    });
-  }
-
-  @Test
-  public void test02BlobCreationWithContent() {
+  public void testBlobCreationWithContent() {
     LambdaBlobstore blobStore = getLambdaBlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 2, 1, 2, 1 }, 1, 2);
@@ -122,55 +111,7 @@ public abstract class AbstractBlobstoreTest {
   }
 
   @Test
-  public void test03ParallelBlobUpdateAndRead() {
-    LambdaBlobstore blobStore = getLambdaBlobStore();
-    long blobId = blobStore.createBlob((blobAccessor) -> {
-      blobAccessor.write(new byte[] { 2 }, 0, 1);
-    });
-
-    BooleanHolder waitForReadCheck = new BooleanHolder(true);
-    BooleanHolder waitForUpdate = new BooleanHolder(true);
-
-    new Thread(() -> {
-      try {
-        blobStore.updateBlob(blobId, (blobAccessor) -> {
-          blobAccessor.seek(blobAccessor.getSize());
-          blobAccessor.write(new byte[] { 1 }, 0, 1);
-          waitIfTrue(waitForReadCheck, DEFAULT_TIMEOUT);
-        });
-      } finally {
-        notifyWaiter(waitForUpdate);
-      }
-    }).start();
-
-    try {
-      // Do some test read before update finishes
-      blobStore.readBlob(blobId, (blobReader) -> {
-        byte[] buffer = new byte[2];
-        int read = blobReader.read(buffer, 0, 2);
-        Assert.assertEquals(1, read);
-        Assert.assertEquals(2, buffer[0]);
-      });
-
-      // Create another blob until lock of first blob holds
-      long blobIdOfSecondBlob = blobStore.createBlob(null);
-      blobStore.readBlob(blobIdOfSecondBlob, (blobReader) -> {
-        Assert.assertEquals(0, blobReader.getSize());
-      });
-      blobStore.deleteBlob(blobIdOfSecondBlob);
-
-    } finally {
-      notifyWaiter(waitForReadCheck);
-      waitIfTrue(waitForUpdate, DEFAULT_TIMEOUT);
-    }
-
-    blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
-
-    blobStore.deleteBlob(blobId);
-  }
-
-  @Test
-  public void test04ParallelBlobManipulationWithTwoTransactions() {
+  public void testParallelBlobManipulationWithTwoTransactions() {
     LambdaBlobstore blobStore = getLambdaBlobStore();
     long blobId = blobStore.createBlob((blobAccessor) -> {
       blobAccessor.write(new byte[] { 0 }, 0, 1);
@@ -225,7 +166,55 @@ public abstract class AbstractBlobstoreTest {
   }
 
   @Test
-  public void test05Seek() {
+  public void testReadBlobDuringOngoingUpdateOnOtherThread() {
+    LambdaBlobstore blobStore = getLambdaBlobStore();
+    long blobId = blobStore.createBlob((blobAccessor) -> {
+      blobAccessor.write(new byte[] { 2 }, 0, 1);
+    });
+
+    BooleanHolder waitForReadCheck = new BooleanHolder(true);
+    BooleanHolder waitForUpdate = new BooleanHolder(true);
+
+    new Thread(() -> {
+      try {
+        blobStore.updateBlob(blobId, (blobAccessor) -> {
+          blobAccessor.seek(blobAccessor.getSize());
+          blobAccessor.write(new byte[] { 1 }, 0, 1);
+          waitIfTrue(waitForReadCheck, DEFAULT_TIMEOUT);
+        });
+      } finally {
+        notifyWaiter(waitForUpdate);
+      }
+    }).start();
+
+    try {
+      // Do some test read before update finishes
+      blobStore.readBlob(blobId, (blobReader) -> {
+        byte[] buffer = new byte[2];
+        int read = blobReader.read(buffer, 0, 2);
+        Assert.assertEquals(1, read);
+        Assert.assertEquals(2, buffer[0]);
+      });
+
+      // Create another blob until lock of first blob holds
+      long blobIdOfSecondBlob = blobStore.createBlob(null);
+      blobStore.readBlob(blobIdOfSecondBlob, (blobReader) -> {
+        Assert.assertEquals(0, blobReader.getSize());
+      });
+      blobStore.deleteBlob(blobIdOfSecondBlob);
+
+    } finally {
+      notifyWaiter(waitForReadCheck);
+      waitIfTrue(waitForUpdate, DEFAULT_TIMEOUT);
+    }
+
+    blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
+
+    blobStore.deleteBlob(blobId);
+  }
+
+  @Test
+  public void testSeek() {
     LambdaBlobstore blobStore = getLambdaBlobStore();
     final int sampleContentSize = 1024 * 1024;
     long blobId = blobStore.createBlob((blobAccessor) -> {
@@ -262,8 +251,19 @@ public abstract class AbstractBlobstoreTest {
     blobStore.deleteBlob(blobId);
   }
 
+  private void testSeekAndRead(final BlobReader blobAccessor, final int sampleContentSize) {
+    byte[] buffer = new byte[2];
+    blobAccessor.seek(sampleContentSize / 2);
+    blobAccessor.read(buffer, 0, buffer.length);
+    Assert.assertArrayEquals(new byte[] { 0, 1 }, buffer);
+
+    blobAccessor.seek(1);
+    blobAccessor.read(buffer, 0, buffer.length);
+    Assert.assertArrayEquals(new byte[] { 1, 2 }, buffer);
+  }
+
   @Test
-  public void test06VersionIsUpgradedDuringUpdate() {
+  public void testVersionIsUpgradedDuringUpdate() {
     LambdaBlobstore blobstore = getLambdaBlobStore();
     Set<Long> usedVersions = Collections.synchronizedSet(new HashSet<>());
     final long blobId = blobstore.createBlob((blobAccessor) -> {
@@ -298,15 +298,15 @@ public abstract class AbstractBlobstoreTest {
     Assert.assertFalse(sameVersionWasUsedTwice.get());
   }
 
-  private void testSeekAndRead(final BlobReader blobAccessor, final int sampleContentSize) {
-    byte[] buffer = new byte[2];
-    blobAccessor.seek(sampleContentSize / 2);
-    blobAccessor.read(buffer, 0, buffer.length);
-    Assert.assertArrayEquals(new byte[] { 0, 1 }, buffer);
+  @Test
+  public void testZeroLengthBlob() {
+    LambdaBlobstore blobStore = getLambdaBlobStore();
+    long blobId = blobStore.createBlob((blobAccessor) -> {
+    });
 
-    blobAccessor.seek(1);
-    blobAccessor.read(buffer, 0, buffer.length);
-    Assert.assertArrayEquals(new byte[] { 1, 2 }, buffer);
+    blobStore.readBlob(blobId, (blobReader) -> {
+      Assert.assertEquals(0, blobReader.getSize());
+    });
   }
 
   private boolean threadWaitingOnStreamRead(final Thread thread) {
