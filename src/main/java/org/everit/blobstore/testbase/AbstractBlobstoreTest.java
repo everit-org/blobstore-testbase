@@ -36,17 +36,6 @@ import org.junit.Test;
  */
 public abstract class AbstractBlobstoreTest {
 
-  /**
-   * Simple holder to be able to pass value via lambda expressions.
-   */
-  private static final class BooleanHolder {
-    public boolean value = false;
-
-    public BooleanHolder(final boolean value) {
-      this.value = value;
-    }
-  }
-
   private static final int DEFAULT_TIMEOUT = 5000;
 
   private LambdaBlobstore lambdaBlobstore;
@@ -82,13 +71,6 @@ public abstract class AbstractBlobstoreTest {
 
   protected abstract TransactionHelper getTransactionHelper();
 
-  private void notifyWaiter(final BooleanHolder shouldWait) {
-    synchronized (shouldWait) {
-      shouldWait.value = false;
-      shouldWait.notifyAll();
-    }
-  }
-
   @Test
   public void testBlobCreationWithContent() {
     LambdaBlobstore blobStore = getLambdaBlobStore();
@@ -114,7 +96,7 @@ public abstract class AbstractBlobstoreTest {
       blobAccessor.write(new byte[] { 0 }, 0, 1);
     });
 
-    BooleanHolder waitForAppendByBlockedThread = new BooleanHolder(true);
+    BooleanHolder waitForAppendByBlockedThread = new BooleanHolder(false);
 
     getTransactionHelper().required(() -> {
       blobStore.updateBlob(blobId, (blobAccessor) -> {
@@ -142,18 +124,20 @@ public abstract class AbstractBlobstoreTest {
 
           });
         } finally {
-          notifyWaiter(waitForAppendByBlockedThread);
+          BlobstoreTestUtil.notifyAboutEvent(waitForAppendByBlockedThread);
         }
       });
       otherUpdatingThread.start();
       final int maxWaitTime = 1000;
-      waitForThreadStateOrSocketRead(otherUpdatingThread, State.WAITING, maxWaitTime);
+      BlobstoreTestUtil.waitForThreadStateOrSocketRead(otherUpdatingThread, State.WAITING,
+          maxWaitTime);
       blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
 
       return null;
     });
 
-    waitIfTrue(waitForAppendByBlockedThread, DEFAULT_TIMEOUT);
+    Assert
+        .assertTrue(BlobstoreTestUtil.waitForEvent(waitForAppendByBlockedThread, DEFAULT_TIMEOUT));
     final int expectedBlobSize = 3;
 
     blobStore.readBlob(blobId,
@@ -169,18 +153,18 @@ public abstract class AbstractBlobstoreTest {
       blobAccessor.write(new byte[] { 2 }, 0, 1);
     });
 
-    BooleanHolder waitForReadCheck = new BooleanHolder(true);
-    BooleanHolder waitForUpdate = new BooleanHolder(true);
+    BooleanHolder waitForReadCheck = new BooleanHolder(false);
+    BooleanHolder waitForUpdate = new BooleanHolder(false);
 
     new Thread(() -> {
       try {
         blobStore.updateBlob(blobId, (blobAccessor) -> {
           blobAccessor.seek(blobAccessor.getSize());
           blobAccessor.write(new byte[] { 1 }, 0, 1);
-          waitIfTrue(waitForReadCheck, DEFAULT_TIMEOUT);
+          Assert.assertTrue(BlobstoreTestUtil.waitForEvent(waitForReadCheck, DEFAULT_TIMEOUT));
         });
       } finally {
-        notifyWaiter(waitForUpdate);
+        BlobstoreTestUtil.notifyAboutEvent(waitForUpdate);
       }
     }).start();
 
@@ -201,8 +185,8 @@ public abstract class AbstractBlobstoreTest {
       blobStore.deleteBlob(blobIdOfSecondBlob);
 
     } finally {
-      notifyWaiter(waitForReadCheck);
-      waitIfTrue(waitForUpdate, DEFAULT_TIMEOUT);
+      BlobstoreTestUtil.notifyAboutEvent(waitForReadCheck);
+      Assert.assertTrue(BlobstoreTestUtil.waitForEvent(waitForUpdate, DEFAULT_TIMEOUT));
     }
 
     blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
@@ -306,58 +290,4 @@ public abstract class AbstractBlobstoreTest {
     });
   }
 
-  private boolean threadWaitingOnStreamRead(final Thread thread) {
-    StackTraceElement[] stackTrace = thread.getStackTrace();
-    if (stackTrace.length == 0) {
-      return false;
-    }
-    StackTraceElement stackTraceElement = stackTrace[0];
-    return stackTraceElement.isNativeMethod()
-        && stackTraceElement.getClassName().contains("InputStream");
-  }
-
-  private void waitForThreadStateOrSocketRead(final Thread thread, final State state,
-      final int maxWaitTime) {
-
-    long startTime = System.currentTimeMillis();
-    while (thread.getState() != state && !threadWaitingOnStreamRead(thread)) {
-      long currentTime = System.currentTimeMillis();
-      if (currentTime - startTime > maxWaitTime) {
-        StackTraceElement[] stackTrace = thread.getStackTrace();
-        StringBuilder sb = new StringBuilder();
-        for (StackTraceElement stackTraceElement : stackTrace) {
-          sb.append("\n").append(stackTraceElement.toString());
-        }
-
-        throw new IllegalStateException("Expected thread state is " + state
-            + "; current thread state: " + thread.getState()
-            + ", and thread is also not waiting on socket read:" + sb.toString());
-      }
-      try {
-        Thread.sleep(1);
-      } catch (InterruptedException e) {
-        throw new RuntimeException(e);
-      }
-    }
-  }
-
-  private void waitIfTrue(final BooleanHolder shouldWait, final long timeout) {
-    long startTime = System.currentTimeMillis();
-    long timeElapsed = 0;
-    while (shouldWait.value && timeElapsed < timeout) {
-      synchronized (shouldWait) {
-        timeElapsed = System.currentTimeMillis() - startTime;
-        if (shouldWait.value && timeElapsed < timeout) {
-          try {
-            shouldWait.wait(timeout - timeElapsed);
-          } catch (InterruptedException e) {
-            throw new RuntimeException(e);
-          }
-        }
-      }
-    }
-    if (shouldWait.value) {
-      Assert.fail("Expected operation has not been run until timeout");
-    }
-  }
 }
