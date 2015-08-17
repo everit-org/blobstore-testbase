@@ -224,6 +224,8 @@ public class BlobstoreStressAndConsistencyTester {
 
   protected final int iterationNum;
 
+  protected AtomicReference<Throwable> occuredThrowable = new AtomicReference<Throwable>();
+
   protected final int readActionTopIndex;
 
   protected final int threadNum;
@@ -453,6 +455,9 @@ public class BlobstoreStressAndConsistencyTester {
           }
         } ,
         (blobstore, blobReader) -> {
+          if (blobReader.getVersion() > 1) {
+            System.out.flush();
+          }
           try {
             if (sampleContent.value == null) {
               int blobSize = (int) blobReader.getSize();
@@ -470,7 +475,9 @@ public class BlobstoreStressAndConsistencyTester {
               try {
                 Assert.assertArrayEquals(sampleContent.value, content);
               } catch (AssertionError e) {
-                LOGGER.log(Level.INFO, "Conflict in Blob: " + blobReader.getBlobId());
+                LOGGER.log(Level.INFO,
+                    "Conflict in Blob: [blobId=" + blobReader.getBlobId() + ", version="
+                        + blobReader.getVersion() + "]");
                 throw e;
               }
             }
@@ -531,13 +538,16 @@ public class BlobstoreStressAndConsistencyTester {
     createInitialBlobs();
     long initializationEndTime = System.currentTimeMillis();
 
-    LOGGER.info("Test blob set creation took " + (initializationEndTime - startTime) + " ms.");
+    LOGGER.info("Creation of " + initialBlobNum + " blob(s) took "
+        + (initializationEndTime - startTime) + " ms.");
 
     CountDownLatch countDownLatch = new CountDownLatch(threadNum);
     for (int i = 0; i < threadNum; i++) {
       new Thread(() -> {
         try {
           runTestIterationsInThread();
+        } catch (Throwable th) {
+          occuredThrowable.compareAndSet(null, th);
         } finally {
           countDownLatch.countDown();
         }
@@ -546,13 +556,23 @@ public class BlobstoreStressAndConsistencyTester {
     try {
       countDownLatch.await();
     } catch (InterruptedException e) {
-      throw new RuntimeException(e);
+      if (occuredThrowable.get() != null) {
+        Throwable occured = occuredThrowable.get();
+        occured.addSuppressed(e);
+        throwAsUnchecked(e);
+      } else {
+        throw new RuntimeException(e);
+      }
     }
+    if (occuredThrowable.get() != null) {
+      throwAsUnchecked(occuredThrowable.get());
+    }
+
     long endTime = System.currentTimeMillis();
     long duration = endTime - initializationEndTime;
     int operationNum = threadNum * iterationNum;
-    LOGGER.info(operationNum + " operation took " + duration + " ms. " + (operationNum / duration)
-        + " operation / ms");
+    LOGGER.info(
+        operationNum + " blob operation on " + threadNum + " thread(s) took " + duration + " ms. ");
 
     deleteAllBlobs();
     long deleteBlobsEnd = System.currentTimeMillis();
@@ -606,6 +626,9 @@ public class BlobstoreStressAndConsistencyTester {
   protected void runTestIterationsInThread() {
     Random r = new Random();
     for (int i = 0; i < iterationNum; i++) {
+      if (occuredThrowable.get() != null) {
+        return;
+      }
       int actionIndex = r.nextInt(deleteActionTopIndex);
       try {
         if (actionIndex < createActionTopIndex) {
@@ -620,6 +643,23 @@ public class BlobstoreStressAndConsistencyTester {
       } catch (PossibleConcurrentException e) {
         LOGGER.warning(e.getMessage());
       }
+    }
+  }
+
+  /**
+   * Rethrows the passed throwable if unchecked otherwise throws a {@link RuntimeException} that
+   * wraps the passed throwable.
+   *
+   * @param throwable
+   *          The {@link Throwable} to throw as unchecked.
+   */
+  protected void throwAsUnchecked(final Throwable throwable) {
+    if (throwable instanceof RuntimeException) {
+      throw (RuntimeException) throwable;
+    } else if (throwable instanceof Error) {
+      throw (Error) throwable;
+    } else {
+      throw new RuntimeException(throwable);
     }
   }
 
