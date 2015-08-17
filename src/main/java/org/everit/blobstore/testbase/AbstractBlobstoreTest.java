@@ -24,7 +24,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 import org.everit.blobstore.BlobReader;
 import org.everit.blobstore.Blobstore;
-import org.everit.osgi.transaction.helper.api.TransactionHelper;
+import org.everit.transaction.propagator.TransactionPropagator;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Assume;
@@ -65,11 +65,11 @@ public abstract class AbstractBlobstoreTest {
     }
     Blobstore blobStore = getBlobStore();
     Assume.assumeNotNull(blobStore);
-    lambdaBlobstore = new LambdaBlobstore(blobStore, getTransactionHelper());
+    lambdaBlobstore = new LambdaBlobstore(blobStore, getTransactionPropagator());
     return lambdaBlobstore;
   }
 
-  protected abstract TransactionHelper getTransactionHelper();
+  protected abstract TransactionPropagator getTransactionPropagator();
 
   @Test
   public void testBlobCreationWithContent() {
@@ -98,14 +98,14 @@ public abstract class AbstractBlobstoreTest {
 
     BooleanHolder waitForAppendByBlockedThread = new BooleanHolder(false);
 
-    getTransactionHelper().required(() -> {
+    getTransactionPropagator().required(() -> {
       blobStore.updateBlob(blobId, (blobAccessor) -> {
         blobAccessor.seek(blobAccessor.getSize());
         blobAccessor.write(new byte[] { 1 }, 0, 1);
       });
       blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(2, blobReader.getSize()));
 
-      getTransactionHelper().requiresNew(() -> {
+      getTransactionPropagator().requiresNew(() -> {
         blobStore.readBlob(blobId, (blobReader) -> Assert.assertEquals(1, blobReader.getSize()));
         return null;
       });

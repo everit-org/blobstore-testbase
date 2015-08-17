@@ -22,7 +22,7 @@ import java.util.function.Consumer;
 import org.everit.blobstore.BlobAccessor;
 import org.everit.blobstore.BlobReader;
 import org.everit.blobstore.Blobstore;
-import org.everit.osgi.transaction.helper.api.TransactionHelper;
+import org.everit.transaction.propagator.TransactionPropagator;
 
 /**
  * Helper class to be able to use blobstore via Java 8 lambda expressions.
@@ -31,20 +31,21 @@ public class LambdaBlobstore {
 
   private final Set<Long> blobIdsToDelete = new ConcurrentSkipListSet<>();
 
-  private final TransactionHelper transactionHelper;
+  private final TransactionPropagator transactionPropagator;
 
   private final Blobstore wrapped;
 
-  public LambdaBlobstore(final Blobstore wrapped, final TransactionHelper transactionHelper) {
+  public LambdaBlobstore(final Blobstore wrapped,
+      final TransactionPropagator transactionPropagator) {
     this.wrapped = wrapped;
-    this.transactionHelper = transactionHelper;
+    this.transactionPropagator = transactionPropagator;
   }
 
   /**
    * See {@link Blobstore#createBlob()}.
    */
   public long createBlob(final Consumer<BlobAccessor> action) {
-    long blobId = transactionHelper.required(() -> {
+    long blobId = transactionPropagator.required(() -> {
       try (BlobAccessor blobAccessor = wrapped.createBlob()) {
         if (action != null) {
           action.accept(blobAccessor);
@@ -72,7 +73,7 @@ public class LambdaBlobstore {
    * See {@link Blobstore#deleteBlob(long)}.
    */
   public void deleteBlob(final long blobId) {
-    transactionHelper.required(() -> {
+    transactionPropagator.required(() -> {
       wrapped.deleteBlob(blobId);
       return null;
     });
@@ -83,7 +84,7 @@ public class LambdaBlobstore {
    * See {@link Blobstore#readBlob(long)}.
    */
   public void readBlob(final long blobId, final Consumer<BlobReader> action) {
-    transactionHelper.required(() -> {
+    transactionPropagator.required(() -> {
       try (BlobReader blobReader = wrapped.readBlob(blobId)) {
         if (action != null) {
           action.accept(blobReader);
@@ -97,7 +98,7 @@ public class LambdaBlobstore {
    * See {@link Blobstore#updateBlob(long)}.
    */
   public void updateBlob(final long blobId, final Consumer<BlobAccessor> action) {
-    transactionHelper.required(() -> {
+    transactionPropagator.required(() -> {
       try (BlobAccessor blobAccessor = wrapped.updateBlob(blobId)) {
         if (action != null) {
           action.accept(blobAccessor);

@@ -35,7 +35,7 @@ import org.everit.blobstore.BlobAccessor;
 import org.everit.blobstore.BlobReader;
 import org.everit.blobstore.Blobstore;
 import org.everit.blobstore.NoSuchBlobException;
-import org.everit.osgi.transaction.helper.api.TransactionHelper;
+import org.everit.transaction.propagator.TransactionPropagator;
 import org.junit.Assert;
 
 /**
@@ -178,7 +178,7 @@ public class BlobstoreStressAndConsistencyTester {
    *
    * @param config
    *          The configuration of the stress tests.
-   * @param transactionHelper
+   * @param transactionPropagator
    *          Transaction helper that makes it possible to run the same action on all blobstores
    *          atomically.
    * @param blobstores
@@ -187,7 +187,7 @@ public class BlobstoreStressAndConsistencyTester {
    *          the same data within the different stores.
    */
   public static void runStressTest(final BlobstoreStressTestConfiguration config,
-      final TransactionHelper transactionHelper, final Blobstore... blobstores) {
+      final TransactionPropagator transactionPropagator, final Blobstore... blobstores) {
     Objects.nonNull(blobstores);
     Objects.nonNull(config);
 
@@ -196,7 +196,7 @@ public class BlobstoreStressAndConsistencyTester {
     }
 
     BlobstoreStressAndConsistencyTester tester = new BlobstoreStressAndConsistencyTester(config,
-        transactionHelper, blobstores);
+        transactionPropagator, blobstores);
     tester.runTest();
   }
 
@@ -230,7 +230,7 @@ public class BlobstoreStressAndConsistencyTester {
 
   protected final int threadNum;
 
-  protected final TransactionHelper transactionHelper;
+  protected final TransactionPropagator transactionPropagator;
 
   protected final int updateActionTopIndex;
 
@@ -239,7 +239,7 @@ public class BlobstoreStressAndConsistencyTester {
    *
    * @param config
    *          The configuration of the stress tests.
-   * @param transactionHelper
+   * @param transactionPropagator
    *          Transaction helper that makes it possible to run the same action on all blobstores
    *          atomically.
    * @param blobstores
@@ -248,7 +248,7 @@ public class BlobstoreStressAndConsistencyTester {
    *          the same data within the different stores.
    */
   protected BlobstoreStressAndConsistencyTester(final BlobstoreStressTestConfiguration config,
-      final TransactionHelper transactionHelper,
+      final TransactionPropagator transactionPropagator,
       final Blobstore[] blobstores) {
     this.blobstores = blobstores;
     this.averageInitialBlobSize = config.averageInitialBlobSize;
@@ -265,7 +265,7 @@ public class BlobstoreStressAndConsistencyTester {
     this.threadNum = config.threadNum;
     this.iterationNum = config.iterationNumPerThread;
 
-    this.transactionHelper = transactionHelper;
+    this.transactionPropagator = transactionPropagator;
 
   }
 
@@ -322,7 +322,7 @@ public class BlobstoreStressAndConsistencyTester {
     Random r = new Random();
     int blobSize = r.nextInt(averageInitialBlobSize * 2);
     byte[] blobContent = createRandomContent(blobSize);
-    transactionHelper.required(() -> {
+    transactionPropagator.required(() -> {
       long[] blobIds = new long[blobstores.length];
       for (int i = 0; i < blobstores.length; i++) {
         Blobstore blobstore = blobstores[i];
@@ -367,7 +367,7 @@ public class BlobstoreStressAndConsistencyTester {
    * Deletes all blobs in all blobstores that were created by this tester.
    */
   protected void deleteAllBlobs() {
-    transactionHelper.required(() -> {
+    transactionPropagator.required(() -> {
       for (long[] blobIds : availableBlobs) {
         for (int i = 0; i < blobIds.length; i++) {
           blobstores[i].deleteBlob(blobIds[i]);
@@ -387,7 +387,7 @@ public class BlobstoreStressAndConsistencyTester {
       return;
     }
     try {
-      transactionHelper.required(() -> {
+      transactionPropagator.required(() -> {
         for (int i = 0; i < blobstores.length; i++) {
           blobstores[i].deleteBlob(blobIds[i]);
         }
@@ -600,7 +600,7 @@ public class BlobstoreStressAndConsistencyTester {
       return;
     }
 
-    transactionHelper.required(() -> {
+    transactionPropagator.required(() -> {
       Object[] results = new Object[blobstores.length];
       synchronized (blobIds) {
         try {
