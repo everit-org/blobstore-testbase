@@ -79,6 +79,12 @@
         <groupId>org.apache.felix</groupId>
         <artifactId>maven-bundle-plugin</artifactId>
         <extensions>true</extensions>
+        <configuration>
+          <instructions>
+            <Import-Package>org.everit.blobstore;version="[1.0,1.1),*</Import-Package>
+            <Export-Package>org.everit.blobstore.testbase</Export-Package>
+          </instructions>
+        </configuration>
       </plugin>
     </plugins>
   </build>
