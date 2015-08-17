@@ -173,6 +173,8 @@ public class BlobstoreStressAndConsistencyTester {
   private static final Logger LOGGER = Logger
       .getLogger(BlobstoreStressAndConsistencyTester.class.getName());
 
+  static final long[] NO_BLOB_BLOBID_ARRAY = null;
+
   /**
    * Runs a stress and optionally a consistency test.
    *
@@ -188,8 +190,8 @@ public class BlobstoreStressAndConsistencyTester {
    */
   public static void runStressTest(final BlobstoreStressTestConfiguration config,
       final TransactionPropagator transactionPropagator, final Blobstore... blobstores) {
-    Objects.nonNull(blobstores);
-    Objects.nonNull(config);
+    Objects.requireNonNull(blobstores);
+    Objects.requireNonNull(config);
 
     if (blobstores.length == 0) {
       return;
@@ -419,7 +421,7 @@ public class BlobstoreStressAndConsistencyTester {
       int size = availableBlobs.size();
       if (size == 0) {
         LOGGER.warning("Blobstore is exhausted");
-        return null;
+        return NO_BLOB_BLOBID_ARRAY;
       }
       int randomIndex = r.nextInt(size);
       return availableBlobs.get(randomIndex);
